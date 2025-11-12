@@ -16,7 +16,6 @@ def filter_pdb_by_residues(pdb_file, output_file, residue_file=None, renumber=Fa
     output_lines = []
     in_model = False
     model_atoms = []
-    original_residues = []  # Store original residue IDs in order
     model_count = 0
     
     for line in pdb_lines:
@@ -34,9 +33,8 @@ def filter_pdb_by_residues(pdb_file, output_file, residue_file=None, renumber=Fa
             # Process current MODEL atoms
             in_model = False
             
-            # Collect all CA atoms and corresponding residue IDs for current MODEL
+            # Collect all CA atoms for current MODEL
             ca_atoms = []
-            current_model_residues = []
             
             for atom_line in model_atoms:
                 if atom_line.startswith('ATOM') and atom_line[12:16].strip() == 'CA':
@@ -45,17 +43,12 @@ def filter_pdb_by_residues(pdb_file, output_file, residue_file=None, renumber=Fa
                     # Otherwise, keep all CA atoms
                     if target_residues is None or residue_num in target_residues:
                         ca_atoms.append(atom_line)
-                        current_model_residues.append(residue_num)
             
-            # If first MODEL, record original residue ID order
-            if model_count == 1:
-                original_residues = current_model_residues.copy()
-                print(f"Original residue ID order: {original_residues}")
-                print(f"Number of residues: {len(original_residues)}")
-            
-            # Renumber atoms and residues
+            # Renumber atoms and residues for current model
             filtered_atoms = []
             atom_counter = 1
+            residue_counter = 1
+            current_residue_num = None
             
             for atom_line in ca_atoms:
                 if atom_line.startswith('ATOM'):
@@ -67,8 +60,12 @@ def filter_pdb_by_residues(pdb_file, output_file, residue_file=None, renumber=Fa
                     
                     # Update residue number
                     if renumber:
-                        # Renumber from 1
-                        new_residue_num = original_residues.index(orig_residue_num) + 1
+                        # For renumbering, simply use sequential numbering from 1
+                        # Check if this is a new residue
+                        if orig_residue_num != current_residue_num:
+                            residue_counter += 1
+                            current_residue_num = orig_residue_num
+                        new_residue_num = residue_counter - 1
                     else:
                         # Keep original residue numbers
                         new_residue_num = orig_residue_num
@@ -107,23 +104,16 @@ def filter_pdb_by_residues(pdb_file, output_file, residue_file=None, renumber=Fa
     with open(output_file, 'w') as f:
         f.writelines(output_lines)
     
-    # Write original residue ID record file
-    ori_resid_file = "ori_resid.log"
-    with open(ori_resid_file, 'w') as f:
-        for resid in original_residues:
-            f.write(f"{resid}\n")
-    
     print(f"Processing completed! Results saved to: {output_file}")
-    print(f"Original residue IDs recorded in: {ori_resid_file}")
     if renumber:
-        print(f"Residue numbering mapping: {dict(zip(range(1, len(original_residues) + 1), original_residues))}")
+        print("All residues renumbered starting from 1 in each MODEL")
     else:
         print("Residue numbers kept as original")
 
 def main():
     parser = argparse.ArgumentParser(description='Filter PDB file by residue numbers')
     parser.add_argument('-filter', help='File containing residue numbers to keep (optional)')
-    parser.add_argument('-renum', action='store_true', help='Renumber residues starting from 1')
+    parser.add_argument('-renum', action='store_true', help='Renumber residues starting from 1 in each MODEL')
     parser.add_argument('-i', '--input', required=True, help='Input PDB file')
     parser.add_argument('-o', '--output', required=True, help='Output PDB file')
     
